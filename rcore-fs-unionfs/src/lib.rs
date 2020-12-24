@@ -491,6 +491,19 @@ impl INode for UnionINode {
         inner.container_inode()?.set_metadata(metadata)
     }
 
+    fn get_fs_type(&self) -> Result<FsType> {
+        Ok(FsType::UNIONFS)
+    }
+
+    fn cache_needed(&self) -> bool
+    {
+        true
+    }
+
+    fn get_inode_num(&self) -> Result<usize> {
+        Ok(self.id)
+    }
+
     fn sync_all(&self) -> Result<()> {
         let inner = self.inner.read();
         if let Some(inode) = inner.maybe_container_inode() {

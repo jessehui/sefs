@@ -5,6 +5,16 @@ use core::fmt;
 use core::result;
 use core::str;
 
+#[derive(Clone, Copy, Debug)]
+pub enum FsType {
+    RAMFS = 1,
+    SEFS = 2,
+    HOSTFS = 3,
+    UNIONFS = 4,
+}
+
+type INodeId = usize;
+
 /// Abstract file system object such as file or directory.
 pub trait INode: Any + Sync + Send {
     /// Read bytes at `offset` into `buf`, return the number of bytes read.
@@ -23,6 +33,23 @@ pub trait INode: Any + Sync + Send {
 
     /// Set metadata of the INode
     fn set_metadata(&self, _metadata: &Metadata) -> Result<()> {
+        Err(FsError::NotSupported)
+    }
+
+    /// Get file system type
+    fn get_fs_type(&self) -> Result<FsType>
+    {
+        Err(FsError::NotSupported)
+    }
+
+    /// If page-cache is needed
+    fn cache_needed(&self) -> bool
+    {
+        false
+    }
+
+    /// Get the unique id of inode, normally, this could be inode id
+    fn get_inode_num(&self) -> Result<INodeId> {
         Err(FsError::NotSupported)
     }
 

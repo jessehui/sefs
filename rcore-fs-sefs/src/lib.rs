@@ -16,7 +16,7 @@ use core::mem::MaybeUninit;
 use bitvec::prelude::*;
 use rcore_fs::dev::{DevResult, TimeProvider};
 use rcore_fs::dirty::Dirty;
-use rcore_fs::vfs::{self, FileSystem, FsError, INode, Timespec};
+use rcore_fs::vfs::{self, FileSystem, FsError, INode, Timespec, FsType};
 use spin::RwLock;
 
 use self::dev::*;
@@ -269,6 +269,20 @@ impl vfs::INode for INodeImpl {
         disk_inode.mtime = metadata.mtime.sec as u32;
         disk_inode.ctime = metadata.ctime.sec as u32;
         Ok(())
+    }
+
+    fn get_fs_type(&self) -> vfs::Result<FsType> {
+        Ok(FsType::SEFS)
+    }
+
+    /// If page-cache is needed
+    fn cache_needed(&self) -> bool
+    {
+        true
+    }
+
+    fn get_inode_num(&self) -> vfs::Result<INodeId> {
+        Ok(self.id)
     }
 
     fn sync_all(&self) -> vfs::Result<()> {

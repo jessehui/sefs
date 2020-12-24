@@ -242,6 +242,20 @@ impl INode for MNode {
         self.inode.set_metadata(metadata)
     }
 
+    fn get_fs_type(&self) -> Result<FsType> {
+        self.inode.get_fs_type()
+    }
+
+    /// If page-cache is needed
+    fn cache_needed(&self) -> bool
+    {
+        self.inode.cache_needed()
+    }
+
+    fn get_inode_num(&self) -> Result<INodeId> {
+        self.inode.get_inode_num()
+    }
+
     fn sync_all(&self) -> Result<()> {
         self.inode.sync_all()
     }

@@ -162,6 +162,10 @@ impl INode for LockedINode {
         Ok(())
     }
 
+    fn get_fs_type(&self) -> Result<FsType> {
+        Ok(FsType::RAMFS)
+    }
+
     fn sync_all(&self) -> Result<()> {
         Ok(())
     }
