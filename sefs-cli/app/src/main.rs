@@ -18,14 +18,10 @@ use rcore_fs_sefs as sefs;
 use rcore_fs_sefs::dev::std_impl::StdUuidProvider;
 use rcore_fs_unionfs as unionfs;
 
-mod enclave;
 mod sgx_dev;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
-    /// Path of the enclave library
-    #[structopt(short, long, parse(from_os_str))]
-    enclave: PathBuf,
     /// Command
     #[structopt(subcommand)]
     cmd: Cmd,
@@ -88,17 +84,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let opt = Opt::from_args();
 
-    let enclave = match enclave::init_enclave(&opt.enclave.to_str().unwrap()) {
-        Ok(r) => {
-            println!("[+] Init Enclave Successful {}!", r.geteid());
-            r
-        }
-        Err(x) => {
-            println!("[-] Init Enclave Failed!");
-            return Err(Box::new(IoError::new(ErrorKind::Other, x.as_str())));
-        }
-    };
-
     match opt.cmd {
         Cmd::Mount {
             image,
@@ -109,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let key = parse_key(&key)?;
             let image_fs = {
                 let mode = sgx_dev::EncryptMode::from_parameters(true, &key)?;
-                let device = sgx_dev::SgxStorage::new(enclave.geteid(), &image, mode);
+                let device = sgx_dev::SgxStorage::new( &image, mode);
                 sefs::SEFS::open(Box::new(device), &StdTimeProvider, &StdUuidProvider)?
             };
             let mnt_dir = dir.clone();
@@ -134,7 +119,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if container.is_dir() {
                 let union_fs = {
                     let mode = sgx_dev::EncryptMode::from_parameters(false, &key)?;
-                    let device = sgx_dev::SgxStorage::new(enclave.geteid(), &container, mode);
+                    let device = sgx_dev::SgxStorage::new( &container, mode);
                     let container_fs =
                         sefs::SEFS::open(Box::new(device), &StdTimeProvider, &StdUuidProvider)?;
                     unionfs::UnionFS::new(vec![container_fs, image_fs])?
@@ -155,7 +140,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 std::fs::create_dir(&image)?;
                 let key = parse_key(&key)?;
                 let mode = sgx_dev::EncryptMode::from_parameters(true, &key)?;
-                let device = sgx_dev::SgxStorage::new(enclave.geteid(), &image, mode);
+                let device = sgx_dev::SgxStorage::new( &image, mode);
                 sefs::SEFS::create(Box::new(device), &StdTimeProvider, &StdUuidProvider)?
             };
             zip_dir(&dir, sefs_fs.root_inode())?;
@@ -183,7 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let sefs_fs = {
                 let key = parse_key(&key)?;
                 let mode = sgx_dev::EncryptMode::from_parameters(protect_integrity, &key)?;
-                let device = sgx_dev::SgxStorage::new(enclave.geteid(), &image, mode);
+                let device = sgx_dev::SgxStorage::new(&image, mode);
                 sefs::SEFS::open(Box::new(device), &StdTimeProvider, &StdUuidProvider)?
             };
             std::fs::create_dir(&dir)?;

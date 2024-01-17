@@ -1,11 +1,17 @@
 use rcore_fs::dev::{DevError, DevResult, EINVAL};
-use rcore_fs_sefs::dev::SefsMac;
+use rcore_fs_sefs::dev::{SefsMac, sgx_aes_gcm_128bit_tag_t};
 use rcore_fs_sefs::dev::{File, Storage};
-use sgx_types::*;
+use sgx_types::types::{Key128bit, EnclaveId, size_t, uint8_t};
 use std::fs::{read_dir, remove_file};
 use std::io;
 use std::mem;
 use std::path::*;
+use sgx_tprotected_fs::{SgxFile as TfsFile, OpenOptions, EncryptMode as TfsEncryptMode};
+use log::*;
+use std::os::unix::fs::{FileExt};
+use std::io::Write;
+
+type sgx_status_t = sgx_types::error::SgxStatus;
 
 pub struct SgxStorage {
     path: PathBuf,
@@ -14,8 +20,8 @@ pub struct SgxStorage {
 
 pub enum EncryptMode {
     IntegrityOnly,
-    EncryptWithIntegrity(sgx_key_128bit_t),
-    Encrypt(sgx_key_128bit_t),
+    EncryptWithIntegrity(Key128bit),
+    Encrypt(Key128bit),
     EncryptAutoKey,
 }
 
@@ -38,10 +44,10 @@ impl EncryptMode {
         }
     }
 
-    fn parse_key(key_str: &str) -> Result<sgx_key_128bit_t, Box<dyn std::error::Error>> {
+    fn parse_key(key_str: &str) -> Result<Key128bit, Box<dyn std::error::Error>> {
         let bytes_str_vec = {
             let bytes_str_vec: Vec<&str> = key_str.split("-").collect();
-            if bytes_str_vec.len() != std::mem::size_of::<sgx_key_128bit_t>() {
+            if bytes_str_vec.len() != std::mem::size_of::<Key128bit>() {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "The length or format of Key string is invalid",
@@ -50,7 +56,7 @@ impl EncryptMode {
             bytes_str_vec
         };
 
-        let mut key: sgx_key_128bit_t = Default::default();
+        let mut key: Key128bit = Default::default();
         for (byte_i, byte_str) in bytes_str_vec.iter().enumerate() {
             key[byte_i] = u8::from_str_radix(byte_str, 16)?;
         }
@@ -59,10 +65,7 @@ impl EncryptMode {
 }
 
 impl SgxStorage {
-    pub fn new(eid: sgx_enclave_id_t, path: impl AsRef<Path>, mode: EncryptMode) -> Self {
-        unsafe {
-            EID = eid;
-        }
+    pub fn new(path: impl AsRef<Path>, mode: EncryptMode) -> Self {
         SgxStorage {
             path: path.as_ref().to_path_buf(),
             mode,
@@ -110,17 +113,17 @@ impl Storage for SgxStorage {
 }
 
 pub struct SgxFile {
-    file: usize,
+    file: TfsFile,
 }
 
 impl File for SgxFile {
     fn read_at(&self, buf: &mut [u8], offset: usize) -> DevResult<usize> {
-        let len = file_read_at(self.file, offset, buf);
+        let len = file_read_at(&self.file, offset, buf);
         Ok(len)
     }
 
     fn write_at(&self, buf: &[u8], offset: usize) -> DevResult<usize> {
-        let len = file_write_at(self.file, offset, buf);
+        let len = file_write_at(&self.file, offset, buf);
         if len != buf.len() {
             println!(
                 "write_at return len: {} not equal to buf_len: {}",
@@ -138,7 +141,7 @@ impl File for SgxFile {
     }
 
     fn flush(&self) -> DevResult<()> {
-        match file_flush(self.file) {
+        match file_flush(&self.file) {
             0 => Ok(()),
             e => {
                 println!("failed to flush");
@@ -150,7 +153,8 @@ impl File for SgxFile {
     fn get_file_mac(&self) -> DevResult<SefsMac> {
         let mut mac: sgx_aes_gcm_128bit_tag_t = [0u8; 16];
 
-        file_get_mac(self.file, &mut mac);
+        file_get_mac(&self.file, &mut mac);
+        println!("mac = {:?}", mac);
         let sefs_mac = SefsMac(mac);
         Ok(sefs_mac)
     }
@@ -158,126 +162,78 @@ impl File for SgxFile {
 
 impl Drop for SgxFile {
     fn drop(&mut self) {
-        let _ = file_close(self.file);
+        let _ = file_close(&self.file);
     }
 }
 
-/// Ecall functions to access SgxFile
-extern "C" {
-    fn ecall_file_open(
-        eid: sgx_enclave_id_t,
-        retval: *mut size_t,
-        error: *mut i32,
-        path: *const u8,
-        create: uint8_t,
-        protect_integrity: uint8_t,
-        key: *const sgx_key_128bit_t,
-    ) -> sgx_status_t;
-    fn ecall_file_close(eid: sgx_enclave_id_t, retval: *mut i32, fd: size_t) -> sgx_status_t;
-    fn ecall_file_flush(eid: sgx_enclave_id_t, retval: *mut i32, fd: size_t) -> sgx_status_t;
-    fn ecall_file_read_at(
-        eid: sgx_enclave_id_t,
-        retval: *mut usize,
-        fd: size_t,
-        offset: size_t,
-        buf: *mut uint8_t,
-        len: size_t,
-    ) -> sgx_status_t;
-    fn ecall_file_write_at(
-        eid: sgx_enclave_id_t,
-        retval: *mut usize,
-        fd: size_t,
-        offset: size_t,
-        buf: *const uint8_t,
-        len: size_t,
-    ) -> sgx_status_t;
-    fn ecall_file_get_mac(
-        eid: sgx_enclave_id_t,
-        retvat: *mut i32,
-        fd: size_t,
-        mac: *mut uint8_t,
-        len: size_t,
-    ) -> sgx_status_t;
-}
-
-/// Must be set when init enclave
-static mut EID: sgx_enclave_id_t = 0;
-
-fn file_get_mac(fd: usize, mac: *mut sgx_aes_gcm_128bit_tag_t) -> usize {
+fn file_get_mac(file: &TfsFile, mac: *mut sgx_aes_gcm_128bit_tag_t) -> usize {
     let mut ret_val = 0;
     unsafe {
         let len = mem::size_of::<sgx_aes_gcm_128bit_tag_t>();
-        let ret = ecall_file_get_mac(EID, &mut ret_val, fd, mac as *mut u8, len);
-        assert_eq!(ret, sgx_status_t::SGX_SUCCESS);
+        // let ret = ecall_file_get_mac(EID, &mut ret_val, fd, mac as *mut u8, len);
+        // assert_eq!(ret, sgx_status_t::Success);
+        // let mut result_mac = file.get_mac().unwrap();
+        // mem::swap(&mut result_mac, &mut *mac);
+
+        let mut result_mac = file.get_mac();
+        if let Ok(result) = &mut result_mac {
+            mem::swap(result, &mut *mac);
+        }
     }
     ret_val as usize
 }
 
-fn file_open(path: &str, create: bool, mode: &EncryptMode) -> DevResult<usize> {
+fn file_open(path: &str, create: bool, mode: &EncryptMode) -> DevResult<TfsFile> {
     let cpath = format!("{}\0", path);
-    let (protect_integrity, key_ptr) = match mode {
-        EncryptMode::IntegrityOnly => (true, std::ptr::null()),
-        EncryptMode::EncryptWithIntegrity(key) => (true, key as *const sgx_key_128bit_t),
-        EncryptMode::Encrypt(key) => (false, key as *const sgx_key_128bit_t),
-        EncryptMode::EncryptAutoKey => (false, std::ptr::null()),
+    // let (protect_integrity, key_ptr) = match mode {
+    //     EncryptMode::IntegrityOnly => (true, std::ptr::null()),
+    //     EncryptMode::EncryptWithIntegrity(key) => (true, key as *const Key128bit),
+    //     EncryptMode::Encrypt(key) => (false, key as *const Key128bit),
+    //     EncryptMode::EncryptAutoKey => (false, std::ptr::null()),
+    // };
+    let encrypt_mode = match mode {
+        EncryptMode::IntegrityOnly => TfsEncryptMode::integrity_only(),
+        _ => todo!(),
     };
     let mut ret_val = 0;
     let mut error = 0;
-    unsafe {
-        let ret = ecall_file_open(
-            EID,
-            &mut ret_val,
-            &mut error,
-            cpath.as_ptr(),
-            create as uint8_t,
-            protect_integrity as uint8_t,
-            key_ptr,
-        );
-        assert_eq!(ret, sgx_status_t::SGX_SUCCESS);
-    }
-    if ret_val == 0 {
-        let error = io::Error::from_raw_os_error(error);
-        println!(
-            "failed to open SGX protected file: {}, error: {:?}",
-            path, error
-        );
-        return Err(DevError::from(error));
-    }
-    Ok(ret_val)
+    let path = Path::new(path);
+    // let opts = OpenOptions::new();
+    let file = if create {
+        TfsFile::create_integrity_only(path).unwrap()
+    } else {
+        TfsFile::open_integrity_only(path).unwrap()
+    };
+    Ok(file)
 }
 
-fn file_close(fd: usize) -> i32 {
+fn file_close(file: &TfsFile) -> i32 {
     let mut ret_val = -1;
-    unsafe {
-        let ret = ecall_file_close(EID, &mut ret_val, fd);
-        assert_eq!(ret, sgx_status_t::SGX_SUCCESS);
-    }
+    // unsafe {
+    //     let ret = ecall_file_close(EID, &mut ret_val, fd);
+    //     assert_eq!(ret, sgx_status_t::Success);
+    // }
+    // TODO!
     ret_val
 }
 
-fn file_flush(fd: usize) -> i32 {
-    let mut ret_val = -1;
-    unsafe {
-        let ret = ecall_file_flush(EID, &mut ret_val, fd);
-        assert_eq!(ret, sgx_status_t::SGX_SUCCESS);
-    }
-    ret_val
-}
-
-fn file_read_at(fd: usize, offset: usize, buf: &mut [u8]) -> usize {
+fn file_flush(file: &TfsFile) -> i32 {
     let mut ret_val = 0;
-    unsafe {
-        let ret = ecall_file_read_at(EID, &mut ret_val, fd, offset, buf.as_mut_ptr(), buf.len());
-        assert_eq!(ret, sgx_status_t::SGX_SUCCESS);
-    }
+    // unsafe {
+    //     let ret = ecall_file_flush(EID, &mut ret_val, fd);
+    //     assert_eq!(ret, sgx_status_t::Success);
+    // }
+
+    // TODO!
     ret_val
 }
 
-fn file_write_at(fd: usize, offset: usize, buf: &[u8]) -> usize {
-    let mut ret_val = 0;
-    unsafe {
-        let ret = ecall_file_write_at(EID, &mut ret_val, fd, offset, buf.as_ptr(), buf.len());
-        assert_eq!(ret, sgx_status_t::SGX_SUCCESS);
-    }
+fn file_read_at(file: &TfsFile, offset: usize, buf: &mut [u8]) -> usize {
+    let ret_val = file.read_at(buf, offset as u64).unwrap();
+    ret_val
+}
+
+fn file_write_at(file: &TfsFile, offset: usize, buf: &[u8]) -> usize {
+    let ret_val = file.write_at(buf, offset as u64).unwrap();
     ret_val
 }

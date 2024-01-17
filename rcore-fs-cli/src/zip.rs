@@ -23,7 +23,7 @@ pub fn zip_dir(path: &Path, inode: Arc<dyn INode>) -> Result<(), Box<dyn Error>>
         let metadata = fs::symlink_metadata(entry.path())?;
         let type_ = metadata.file_type();
         let mode = (metadata.permissions().mode() & S_IMASK) as u16;
-        //println!("zip: name: {:?}, mode: {:#o}", entry.path(), mode);
+        println!("zip: name: {:?}, mode: {:#o}", entry.path(), mode);
         if type_.is_file() {
             let inode = inode.create(name, FileType::File, mode)?;
             let mut file = fs::File::open(entry.path())?;
