@@ -5,11 +5,11 @@ authors = ["WangRunji <wangrunji0408@163.com>"]
 edition = "2021"
 
 [dependencies]
-rcore-fs = { path = "../rcore-fs" }
+rcore-fs = { path = "../rcore-fs", features = ["no_std"] }
 static_assertions = "0.3"
 spin = "0.5"
 log = "=0.4.17"
-uuid = { version = "0.7", features = ["v4"] }
+uuid = { version = "1.6", default-features = false, features = ["v4"] }
 bitvec = { version = "0.17", default-features = false, features = ["alloc"] }
 
 [features]

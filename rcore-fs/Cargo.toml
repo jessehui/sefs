@@ -14,3 +14,4 @@ tempfile = "3"
 
 [features]
 std = ["libc"]
+no_std = []
