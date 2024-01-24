@@ -4,6 +4,7 @@ use std::io::{Error as IoError, ErrorKind, Read};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::FileExt;
 use std::path::PathBuf;
+use std::fs::OpenOptions;
 use std::process::exit;
 
 use ctrlc;
@@ -137,10 +138,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             key,
         } => {
             let sefs_fs = {
+                // const FS_IMG_SIZE: usize = 0x1000000; // 16MB
                 std::fs::create_dir(&image)?;
+                // let inner = OpenOptions::new()
+                //     .read(true)
+                //     .write(true)
+                //     .create(true)
+                //     .open(&image)
+                //     .unwrap();
+                // inner.set_len(FS_IMG_SIZE as u64).unwrap();
                 let key = parse_key(&key)?;
                 let mode = sgx_dev::EncryptMode::from_parameters(true, &key)?;
                 let device = sgx_dev::SgxStorage::new( &image, mode);
+                println!("device done");
                 sefs::SEFS::create(Box::new(device), &StdTimeProvider, &StdUuidProvider)?
             };
             zip_dir(&dir, sefs_fs.root_inode())?;

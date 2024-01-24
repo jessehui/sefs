@@ -104,10 +104,10 @@ impl Storage for SgxStorage {
     }
 
     fn clear(&self) -> DevResult<()> {
-        for child in read_dir(&self.path)? {
-            let child = child?;
-            remove_file(&child.path())?;
-        }
+        // for child in read_dir(&self.path)? {
+        //     let child = child?;
+        //     remove_file(&child.path())?;
+        // }
         Ok(())
     }
 }

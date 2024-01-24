@@ -917,7 +917,8 @@ impl SEFS {
         };
         // Clear the existing files in storage
         device.clear()?;
-        let meta_file = device.create(METAFILE_NAME)?;
+        // let meta_file = device.create(METAFILE_NAME)?;
+        let meta_file = 
         meta_file.set_len(blocks * BLKSIZE)?;
 
         let sefs = SEFS {
