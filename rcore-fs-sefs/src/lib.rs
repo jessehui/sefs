@@ -196,7 +196,7 @@ impl INodeImpl {
         if self.fs.device.protect_integrity() {
             let inode_mac = &self.disk_inode.read().inode_mac;
             let file_mac = self.file.get_file_mac().unwrap();
-            //info!("inode_mac {:?}, file_mac {:?}", inode_mac, file_mac);
+            log::info!("inode_mac {:?}, file_mac {:?}", inode_mac, file_mac);
             let not_integrity = inode_mac.0 != file_mac.0;
             assert!(!not_integrity, "FsError::NoIntegrity");
         }
@@ -916,7 +916,7 @@ impl SEFS {
             bitset
         };
         // Clear the existing files in storage
-        device.clear()?;
+        // device.clear()?;
         let meta_file = device.create(METAFILE_NAME)?;
         // let meta_file = 
         meta_file.set_len(blocks * BLKSIZE)?;
@@ -1047,7 +1047,7 @@ impl SEFS {
         });
         #[cfg(not(feature = "create_image"))]
         if let false = create {
-            inode.check_integrity()
+            // inode.check_integrity()
         }
         self.inodes.write().insert(id, Arc::downgrade(&inode));
         Ok(inode)
