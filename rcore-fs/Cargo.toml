@@ -8,6 +8,7 @@ edition = "2021"
 spin = "0.5"
 bitflags = "1.0"
 libc = { version = "0.2", optional = true }
+log = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

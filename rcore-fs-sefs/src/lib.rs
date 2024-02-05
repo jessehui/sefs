@@ -26,6 +26,7 @@ use spin::{RwLock, RwLockWriteGuard};
 use self::dev::*;
 pub use self::structs::SEFS_MAGIC;
 use self::structs::*;
+use log::info;
 
 pub mod dev;
 mod structs;
@@ -185,7 +186,7 @@ impl INodeImpl {
     pub fn update_mac(&self) -> vfs::Result<()> {
         if self.fs.device.protect_integrity() {
             self.disk_inode.write().inode_mac = self.file.get_file_mac().unwrap();
-            //println!("file_mac {:?}", self.disk_inode.read().inode_mac);
+            // println!("file_mac {:?}", self.disk_inode.read().inode_mac);
             self.sync_all()?;
         }
         Ok(())
@@ -196,7 +197,6 @@ impl INodeImpl {
         if self.fs.device.protect_integrity() {
             let inode_mac = &self.disk_inode.read().inode_mac;
             let file_mac = self.file.get_file_mac().unwrap();
-            log::info!("inode_mac {:?}, file_mac {:?}", inode_mac, file_mac);
             let not_integrity = inode_mac.0 != file_mac.0;
             assert!(!not_integrity, "FsError::NoIntegrity");
         }
@@ -916,9 +916,8 @@ impl SEFS {
             bitset
         };
         // Clear the existing files in storage
-        // device.clear()?;
+        device.clear()?;
         let meta_file = device.create(METAFILE_NAME)?;
-        // let meta_file = 
         meta_file.set_len(blocks * BLKSIZE)?;
 
         let sefs = SEFS {
@@ -962,6 +961,7 @@ impl SEFS {
     /// Write back super block and free map if dirty
     fn sync_metadata(&self) -> vfs::Result<()> {
         let (mut free_map, mut super_block) = self.write_lock_free_map_and_super_block();
+
         // Sync super block
         if super_block.dirty() {
             self.meta_file
@@ -979,6 +979,7 @@ impl SEFS {
         }
         // Flush
         self.meta_file.flush()?;
+
         Ok(())
     }
 
@@ -1047,9 +1048,10 @@ impl SEFS {
         });
         #[cfg(not(feature = "create_image"))]
         if let false = create {
-            // inode.check_integrity()
+            inode.check_integrity()
         }
         self.inodes.write().insert(id, Arc::downgrade(&inode));
+
         Ok(inode)
     }
 

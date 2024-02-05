@@ -104,10 +104,10 @@ impl Storage for SgxStorage {
     }
 
     fn clear(&self) -> DevResult<()> {
-        // for child in read_dir(&self.path)? {
-        //     let child = child?;
-        //     remove_file(&child.path())?;
-        // }
+        for child in read_dir(&self.path)? {
+            let child = child?;
+            remove_file(&child.path())?;
+        }
         Ok(())
     }
 }
@@ -160,11 +160,11 @@ impl File for SgxFile {
     }
 }
 
-impl Drop for SgxFile {
-    fn drop(&mut self) {
-        let _ = file_close(&self.file);
-    }
-}
+// impl Drop for SgxFile {
+//     fn drop(&mut self) {
+//         let _ = file_close(&self.file);
+//     }
+// }
 
 fn file_get_mac(file: &TfsFile, mac: *mut sgx_aes_gcm_128bit_tag_t) -> usize {
     let mut ret_val = 0;
@@ -179,18 +179,18 @@ fn file_get_mac(file: &TfsFile, mac: *mut sgx_aes_gcm_128bit_tag_t) -> usize {
         if let Ok(result) = &mut result_mac {
             mem::swap(result, &mut *mac);
         }
-    }
+    } 
     ret_val as usize
 }
 
-fn file_open(path: &str, create: bool, mode: &EncryptMode) -> DevResult<TfsFile> {
+fn file_open(path: &str, create: bool, mode: &EncryptMode) -> DevResult<TfsFile> { 
     let cpath = format!("{}\0", path);
-    // let (protect_integrity, key_ptr) = match mode {
-    //     EncryptMode::IntegrityOnly => (true, std::ptr::null()),
-    //     EncryptMode::EncryptWithIntegrity(key) => (true, key as *const Key128bit),
-    //     EncryptMode::Encrypt(key) => (false, key as *const Key128bit),
-    //     EncryptMode::EncryptAutoKey => (false, std::ptr::null()),
-    // };
+    let (protect_integrity, key_ptr) = match mode {
+        EncryptMode::IntegrityOnly => (true, std::ptr::null()),
+        EncryptMode::EncryptWithIntegrity(key) => (true, key as *const Key128bit),
+        EncryptMode::Encrypt(key) => (false, key as *const Key128bit),
+        EncryptMode::EncryptAutoKey => (false, std::ptr::null()), 
+    };
     let encrypt_mode = match mode {
         EncryptMode::IntegrityOnly => TfsEncryptMode::integrity_only(),
         _ => todo!(),
@@ -207,24 +207,9 @@ fn file_open(path: &str, create: bool, mode: &EncryptMode) -> DevResult<TfsFile>
     Ok(file)
 }
 
-fn file_close(file: &TfsFile) -> i32 {
-    let mut ret_val = -1;
-    // unsafe {
-    //     let ret = ecall_file_close(EID, &mut ret_val, fd);
-    //     assert_eq!(ret, sgx_status_t::Success);
-    // }
-    // TODO!
-    ret_val
-}
-
 fn file_flush(file: &TfsFile) -> i32 {
     let mut ret_val = 0;
-    // unsafe {
-    //     let ret = ecall_file_flush(EID, &mut ret_val, fd);
-    //     assert_eq!(ret, sgx_status_t::Success);
-    // }
-
-    // TODO!
+    file.flush(); 
     ret_val
 }
 

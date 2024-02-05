@@ -152,7 +152,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let device = sgx_dev::SgxStorage::new( &image, mode);
                 println!("device done");
                 sefs::SEFS::create(Box::new(device), &StdTimeProvider, &StdUuidProvider)?
-            };
+            }; 
+            println!("zip_dir");
             zip_dir(&dir, sefs_fs.root_inode())?;
             sefs_fs.sync()?;
             let root_mac_str = {

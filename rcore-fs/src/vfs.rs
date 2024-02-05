@@ -5,6 +5,7 @@ use core::any::{Any, TypeId};
 use core::fmt;
 use core::result;
 use core::str;
+use log::info;
 use spin::RwLock;
 
 /// Abstract file system object such as file or directory.
