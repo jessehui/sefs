@@ -203,15 +203,15 @@ impl UnionFS {
 
     /// Create a file to record the FS's MAC
     // FIXME: This can cause the SEFS integrity check fail.
-    fn new_mac_file(_fs: &[Arc<dyn FileSystem>]) -> Result<()> {
-        // let file = fs[0].root_inode().create(MAC_FILE, FileType::File, 0o777)?;
-        // let mut offset = 0;
-        // for inner_fs in fs[1..].iter() {
-        //     let fs_mac = inner_fs.root_mac();
-        //     let len = file.write_at(offset, &fs_mac)?;
-        //     assert!(len == fs_mac.len());
-        //     offset += fs_mac.len();
-        // }
+    fn new_mac_file(fs: &[Arc<dyn FileSystem>]) -> Result<()> {
+        let file = fs[0].root_inode().create(MAC_FILE, FileType::File, 0o777)?;
+        let mut offset = 0;
+        for inner_fs in fs[1..].iter() {
+            let fs_mac = inner_fs.root_mac();
+            let len = file.write_at(offset, &fs_mac)?;
+            assert!(len == fs_mac.len());
+            offset += fs_mac.len();
+        }
         Ok(())
     }
 

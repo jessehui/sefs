@@ -87,11 +87,13 @@ impl INodeImpl {
     /// Only for Dir
     //TODO: Fix the concurrent problem of dentry operations
     fn get_file_inode_and_entry_id(&self, name: &str) -> vfs::Result<(INodeId, usize)> {
+        info!("get_file_inode_and_entry_id name = {:?}", name);
         let name = if name.is_empty() { "." } else { name };
         for entry_id in 0..self.disk_inode.read().blocks as usize {
-            let entry = self.file.read_direntry(entry_id)?;
-            if entry.name.as_ref() == name {
-                return Ok((entry.id as INodeId, entry_id));
+            if let Ok(entry) = self.file.read_direntry(entry_id) {
+                if entry.name.as_ref() == name {
+                    return Ok((entry.id as INodeId, entry_id));
+                }
             }
         }
         Err(FsError::EntryNotFound)
