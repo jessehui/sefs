@@ -11,7 +11,7 @@ use alloc::{
 };
 use core::any::Any;
 use rcore_fs::vfs::*;
-use spin::RwLock;
+use rcore_fs_tstd_lock::RwLock;
 
 #[cfg(test)]
 mod tests;

@@ -5,9 +5,9 @@ authors = ["gjz010 <gjz010944@gmail.com>", "WangRunji <wangrunji0408@163.com>"]
 edition = "2021"
 
 [dependencies]
-rcore-fs = { path = "../rcore-fs" }
-spin = "0.5"
+rcore-fs = { path = "../rcore-fs", features = ["no_std"] }
 log = "=0.4.20"
+rcore-fs-tstd-lock = { path = "../rcore-fs-tstd-lock" }
 
 [dev-dependencies]
 rcore-fs-ramfs = { path = "../rcore-fs-ramfs" }

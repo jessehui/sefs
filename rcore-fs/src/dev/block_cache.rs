@@ -1,7 +1,15 @@
 //! A naive LRU cache layer for `BlockDevice`
 use super::*;
 use alloc::{vec, vec::Vec};
-use spin::{Mutex, MutexGuard};
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(feature = "no_std")] {
+        use rcore_fs_tstd_lock::{Mutex, MutexGuard};
+    } else {
+        use spin::{Mutex, MutexGuard};
+    }
+}
 
 pub struct BlockCache<T: BlockDevice> {
     device: T,

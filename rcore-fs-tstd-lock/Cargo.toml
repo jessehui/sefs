@@ -1,0 +1,8 @@
+[package]
+name = "rcore-fs-tstd-lock"
+version = "0.1.0"
+authors = ["Antfin"]
+edition = "2021"
+
+[dependencies]
+sgx_tstd = { path = "../../../../sgx_tstd" }

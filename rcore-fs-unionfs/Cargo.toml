@@ -8,8 +8,13 @@ edition = "2021"
 
 [dependencies]
 log = "=0.4.20"
-spin = "0.5"
 rcore-fs = { path = "../rcore-fs" }
+rcore-fs-tstd-lock = { path = "../rcore-fs-tstd-lock", optional = true }
+spin = { version = "0.5", optional = true }
 
 [dev-dependencies]
 rcore-fs-ramfs = { path = "../rcore-fs-ramfs" }
+
+[features]
+create_image = ["spin", "rcore-fs/std"]
+no_std = ["rcore-fs-tstd-lock", "rcore-fs/no_std"]

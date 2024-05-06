@@ -18,6 +18,10 @@ use core::any::Any;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use rcore_fs::dev::{DevError, EIO};
 use rcore_fs::vfs::*;
+#[cfg(not(feature = "create_image"))]
+use rcore_fs_tstd_lock::{RwLock, RwLockWriteGuard};
+
+#[cfg(feature = "create_image")]
 use spin::{RwLock, RwLockWriteGuard};
 
 #[cfg(test)]
