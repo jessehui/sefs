@@ -21,6 +21,11 @@ use rcore_fs::dirty::Dirty;
 use rcore_fs::vfs::{
     self, AllocFlags, DirentWriterContext, FallocateMode, FileSystem, FsError, INode,
 };
+
+#[cfg(not(feature = "create_image"))]
+use rcore_fs_tstd_lock::{RwLock, RwLockWriteGuard};
+
+#[cfg(feature = "create_image")]
 use spin::{RwLock, RwLockWriteGuard};
 
 use self::dev::*;
@@ -78,7 +83,8 @@ impl Debug for INodeImpl {
         write!(
             f,
             "INode {{ id: {}, disk: {:?} }}",
-            self.id, self.disk_inode
+            self.id,
+            self.disk_inode.read()
         )
     }
 }

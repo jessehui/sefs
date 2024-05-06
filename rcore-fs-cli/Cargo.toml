@@ -21,4 +21,4 @@ rcore-fs-sfs = { path = "../rcore-fs-sfs" }
 rcore-fs-sefs = { path = "../rcore-fs-sefs", features = ["std"] }
 rcore-fs-ramfs = { path = "../rcore-fs-ramfs" }
 rcore-fs-hostfs = { path = "../rcore-fs-hostfs" }
-rcore-fs-unionfs = { path = "../rcore-fs-unionfs" }
+rcore-fs-unionfs = { path = "../rcore-fs-unionfs", feature = ["create_image"] }

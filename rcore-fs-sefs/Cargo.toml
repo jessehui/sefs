@@ -5,12 +5,13 @@ authors = ["WangRunji <wangrunji0408@163.com>"]
 edition = "2021"
 
 [dependencies]
-rcore-fs = { path = "../rcore-fs", features = ["no_std"] }
+rcore-fs = { path = "../rcore-fs" }
 static_assertions = "0.3"
-spin = "0.5"
+spin = { version = "0.5", optional = true }
 log = "=0.4.20"
 uuid = { version = "1.6", default-features = false, features = ["v4"] }
 bitvec = { version = "0.17", default-features = false, features = ["alloc"] }
+rcore-fs-tstd-lock = { path = "../rcore-fs-tstd-lock", optional = true }
 
 [features]
 std = ["rcore-fs/std"]
@@ -18,4 +19,5 @@ std = ["rcore-fs/std"]
 # (e.g., sefs-cli). When this feature is enabled, the MAC of an SEFS inode
 # will be updated when the inode is closed. When this feature is disabled,
 # the MAC of an SEFS inode will be checked when the inode is open.
-create_image = []
+create_image = ["rcore-fs/std", "spin"]
+no_std = ["rcore-fs/no_std", "rcore-fs-tstd-lock"]

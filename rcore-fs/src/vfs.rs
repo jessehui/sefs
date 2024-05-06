@@ -1,12 +1,20 @@
 use crate::dev::DevError;
 use alloc::vec;
 use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
+use cfg_if::cfg_if;
 use core::any::{Any, TypeId};
 use core::fmt;
 use core::result;
 use core::str;
 use log::info;
-use spin::RwLock;
+
+cfg_if! {
+    if #[cfg(feature = "no_std")] {
+        use sgx_sync::SpinRwLock as RwLock;
+    } else {
+        use spin::RwLock;
+    }
+}
 
 /// Abstract file system object such as file or directory.
 pub trait INode: Any + Sync + Send {

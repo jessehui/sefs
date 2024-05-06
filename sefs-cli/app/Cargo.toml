@@ -16,7 +16,7 @@ structopt = "0.3"
 env_logger = "0.7"
 rcore-fs-cli = { path = "../../rcore-fs-cli", features = ["use_fuse"] }
 rcore-fs-sefs = { path = "../../rcore-fs-sefs", features = ["create_image"] }
-rcore-fs-unionfs = { path = "../../rcore-fs-unionfs" }
+rcore-fs-unionfs = { path = "../../rcore-fs-unionfs", features = ["create_image"] }
 rcore-fs = { path = "../../rcore-fs", features = ["std"] }
 sgx_tprotected_fs = { path = "../../../../../sgx_protected_fs/tfs", default-features = false, features = ["ufs"] }
 log = "0.4"

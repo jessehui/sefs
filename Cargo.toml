@@ -13,4 +13,5 @@ exclude = [
     "rcore-fs-sfs",
     "rcore-fs-ext2",
     "rcore-fs-hostfs",
+    "rcore-fs-tstd-lock",
 ]

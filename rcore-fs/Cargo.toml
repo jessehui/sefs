@@ -5,14 +5,17 @@ authors = ["WangRunji <wangrunji0408@163.com>", "Ben Pig Chu <benpichu@gmail.com
 edition = "2021"
 
 [dependencies]
-spin = "0.5"
 bitflags = "1.0"
 libc = { version = "0.2", optional = true }
 log = "0.4"
+cfg-if = "1.0"
+rcore-fs-tstd-lock = { path = "../rcore-fs-tstd-lock", optional = true }
+sgx_sync = { path = "../../../../sgx_sync", optional = true }
+spin = { version = "0.5", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 
 [features]
-std = ["libc"]
-no_std = []
+std = ["libc", "spin"]
+no_std = ["rcore-fs-tstd-lock", "sgx_sync"]
