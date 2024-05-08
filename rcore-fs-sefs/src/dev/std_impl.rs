@@ -34,10 +34,10 @@ impl StdStorage {
 }
 
 impl super::Storage for StdStorage {
-    fn open(&self, file_id: &str) -> DevResult<Box<dyn super::File>> {
+    fn open(&self, file_id: &str, readonly: bool) -> DevResult<Box<dyn super::File>> {
         let mut path = self.path.to_path_buf();
         path.push(file_id);
-        let file = OpenOptions::new().read(true).write(true).open(path)?;
+        let file = OpenOptions::new().read(true).write(!readonly).open(path)?;
         Ok(Box::new(Mutex::new(file)))
     }
 

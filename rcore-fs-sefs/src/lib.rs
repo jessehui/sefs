@@ -522,6 +522,7 @@ impl vfs::INode for INodeImpl {
         }
 
         // Create a new INode
+        info!("create a new inode, name = {:?}, mode = {:?}", name, mode);
         let inode = self.fs.new_inode(type_, mode)?;
         if type_ == FileType::Dir {
             inode.dirent_init(self.id)?;
@@ -565,7 +566,8 @@ impl vfs::INode for INodeImpl {
         }
 
         let (inode_id, entry_id) = self.get_file_inode_and_entry_id(name)?;
-        let inode = self.fs.get_inode(inode_id)?;
+        info!("unlink name = {:?}", name);
+        let inode = self.fs.get_inode(inode_id, true)?;
 
         if inode.disk_inode.read().type_ == FileType::Dir {
             // only . and ..
@@ -657,7 +659,8 @@ impl vfs::INode for INodeImpl {
         let to_be_replaced_inode_info = if let Ok((dest_inode_id, dest_entry_id)) =
             dest.get_file_inode_and_entry_id(new_name)
         {
-            let dest_inode = self.fs.get_inode(dest_inode_id)?;
+            info!("move new name = {:?}", new_name);
+            let dest_inode = self.fs.get_inode(dest_inode_id, true)?;
             let inode = self.find(old_name)?;
             if inode.metadata()?.inode == dest_inode.metadata()?.inode {
                 // Same INode, do nothing
@@ -724,7 +727,8 @@ impl vfs::INode for INodeImpl {
                     return Err(e);
                 }
             }
-            let inode = self.fs.get_inode(old_entry.id as usize)?;
+            info!("2 move new name = {:?}", new_name);
+            let inode = self.fs.get_inode(old_entry.id as usize, true)?;
             if inode.disk_inode.read().type_ == FileType::Dir {
                 self.nlinks_dec();
                 dest.nlinks_inc();
@@ -747,7 +751,12 @@ impl vfs::INode for INodeImpl {
             return Err(FsError::NameTooLong);
         }
         let inode_id = self.get_file_inode_id(name)?;
-        Ok(self.fs.get_inode(inode_id)?)
+        // let readonly = {
+        //     let mode = FileMode::from_bits(info.mode).unwrap();
+        //     !mode.is_writable()
+        // };
+        info!("find name = {:?}, readonly = {:?}", name, false);
+        Ok(self.fs.get_inode(inode_id, false)?)
     }
 
     fn get_entry(&self, id: usize) -> vfs::Result<String> {
@@ -802,6 +811,7 @@ impl Drop for INodeImpl {
         self.update_mac()
             .expect("failed to update mac when dropping the SEFS Inode");
 
+        info!("drop inode id = {:?}", self.id);
         self.sync_all()
             .expect("failed to sync when dropping the SEFS Inode");
         if self.disk_inode.read().nlinks == 0 {
@@ -860,7 +870,8 @@ impl SEFS {
         time_provider: &'static dyn TimeProvider,
         uuid_provider: &'static dyn UuidProvider,
     ) -> vfs::Result<Arc<Self>> {
-        let meta_file = device.open(METAFILE_NAME)?;
+        info!("open sefs");
+        let meta_file = device.open(METAFILE_NAME, false)?;
 
         // Load super block
         let super_block = meta_file.load_struct::<SuperBlock>(BLKN_SUPER)?;
@@ -1035,7 +1046,11 @@ impl SEFS {
         id: INodeId,
         disk_inode: Dirty<DiskINode>,
         create: bool,
+        readonly: bool,
     ) -> vfs::Result<Arc<INodeImpl>> {
+        // Acquire the lock here to prevent multiple threads trying to open the file on the device
+        let mut inodes = self.inodes.write();
+        info!("_new_inode acquire lock");
         let filename = disk_inode.disk_filename.to_string();
 
         let inode = Arc::new(INodeImpl {
@@ -1043,7 +1058,7 @@ impl SEFS {
             disk_inode: RwLock::new(disk_inode),
             file: match create {
                 true => self.device.create(filename.as_str())?,
-                false => self.device.open(filename.as_str())?,
+                false => self.device.open(filename.as_str(), readonly)?,
             },
             fs: self.self_ptr.upgrade().unwrap(),
         });
@@ -1051,29 +1066,43 @@ impl SEFS {
         if let false = create {
             inode.check_integrity()
         }
-        self.inodes.write().insert(id, Arc::downgrade(&inode));
+        inodes.insert(id, Arc::downgrade(&inode));
 
+        info!("_new_inode release lock");
         Ok(inode)
     }
 
     /// Get inode by id. Load if not in memory.
     /// ** Must ensure it's a valid INode **
-    fn get_inode(&self, id: INodeId) -> vfs::Result<Arc<INodeImpl>> {
+    fn get_inode(&self, id: INodeId, readonly: bool) -> vfs::Result<Arc<INodeImpl>> {
         assert!(!self.free_map.read()[id]);
-
+        info!("get inode id = {:?}", id);
+        info!("sefs inodes = {:?}", *self.inodes.read());
         // In the BTreeSet and not weak.
         if let Some(inode) = self.inodes.read().get(&id) {
+            info!("get inode in the btree set, id = {:?}", id);
             if let Some(inode) = inode.upgrade() {
+                info!("2 get inode in the btree set, id = {:?}", id);
                 return Ok(inode);
             }
         }
         // Load if not in set, or is weak ref.
         let disk_inode = Dirty::new(self.meta_file.load_struct::<DiskINode>(id)?);
-        self._new_inode(id, disk_inode, false)
+        // let readonly = {
+        //     if disk_inode.type_ == FileType::Dir {
+        //         false
+        //     } else {
+        //         let mode = FileMode::from_bits(disk_inode.mode).unwrap();
+        //         !mode.is_writable()
+        //     }
+        // };
+        info!("2 get inode id = {:?}, readonly = {:?}", id, readonly);
+        self._new_inode(id, disk_inode, false, readonly)
     }
 
     /// Create a new INode file
     fn new_inode(&self, type_: FileType, mode: u16) -> vfs::Result<Arc<INodeImpl>> {
+        info!("new inode");
         let id = self.alloc_block().ok_or(FsError::NoDeviceSpace)?;
         let (time, uuid) = if cfg!(feature = "create_image") && self.device.protect_integrity() {
             (Default::default(), SefsUuid::from(id))
@@ -1098,7 +1127,12 @@ impl SEFS {
             disk_filename: uuid,
             inode_mac: Default::default(),
         });
-        self._new_inode(id, disk_inode, true)
+        let readonly = {
+            let file_mode = FileMode::from_bits(mode).unwrap();
+            !file_mode.is_writable()
+        };
+        info!("create new inode id = {:?}, readonly = {:?}", id, readonly);
+        self._new_inode(id, disk_inode, true, readonly)
     }
 
     fn flush_weak_inodes(&self) {
@@ -1109,6 +1143,7 @@ impl SEFS {
             .map(|(&id, _)| id)
             .collect();
         for id in remove_ids.iter() {
+            info!("remove inode id = {:?}", id);
             inodes.remove(id);
         }
     }
@@ -1134,7 +1169,8 @@ impl vfs::FileSystem for SEFS {
     }
 
     fn root_inode(&self) -> Arc<dyn vfs::INode> {
-        self.get_inode(BLKN_ROOT).unwrap()
+        info!("get inode root inode");
+        self.get_inode(BLKN_ROOT, false).unwrap()
     }
 
     fn root_mac(&self) -> vfs::FsMac {
