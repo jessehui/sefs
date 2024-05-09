@@ -828,6 +828,7 @@ impl Drop for INodeImpl {
                 .remove(filename.as_str())
                 .expect("failed to remove file");
         }
+        info!("drop inode id = {:?} done !", self.id);
     }
 }
 
@@ -1051,6 +1052,12 @@ impl SEFS {
         // Acquire the lock here to prevent multiple threads trying to open the file on the device
         let mut inodes = self.inodes.write();
         info!("_new_inode acquire lock");
+        // Check again after acquiring the write lock
+        if let Some(inode_file) = inodes.get(&id) {
+            if let Some(inode_file) = inode_file.upgrade() {
+                return Ok(inode_file);
+            }
+        }
         let filename = disk_inode.disk_filename.to_string();
 
         let inode = Arc::new(INodeImpl {
