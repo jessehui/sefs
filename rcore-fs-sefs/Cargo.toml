@@ -11,6 +11,7 @@ spin = "0.5"
 log = "=0.4.20"
 uuid = { version = "1.6", default-features = false, features = ["v4"] }
 bitvec = { version = "0.17", default-features = false, features = ["alloc"] }
+lru = { path = "../../lru-rs" }
 
 [features]
 std = ["rcore-fs/std"]
