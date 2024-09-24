@@ -18,9 +18,7 @@ use core::ops::Range;
 use bitvec::prelude::*;
 use rcore_fs::dev::{DevResult, TimeProvider};
 use rcore_fs::dirty::Dirty;
-use rcore_fs::vfs::{
-    self, AllocFlags, DirentVisitor, FallocateMode, FileSystem, FsError, INode,
-};
+use rcore_fs::vfs::{self, AllocFlags, DirentVisitor, FallocateMode, FileSystem, FsError, INode};
 
 #[cfg(not(feature = "create_image"))]
 use rcore_fs_tstd_lock::{RwLock, RwLockWriteGuard};
@@ -606,6 +604,7 @@ impl vfs::INode for INodeImpl {
         let child = other
             .downcast_ref::<INodeImpl>()
             .ok_or(FsError::NotSameFs)?;
+        info!("link child = {:?}", child);
         if !Arc::ptr_eq(&self.fs, &child.fs) {
             return Err(FsError::NotSameFs);
         }
@@ -664,6 +663,7 @@ impl vfs::INode for INodeImpl {
             dest.get_file_inode_and_entry_id(new_name)
         {
             let dest_inode = self.fs.get_inode(dest_inode_id)?;
+            info!("dest inode = {:?}", dest_inode);
             let inode = self.find(old_name)?;
             if inode.metadata()?.inode == dest_inode.metadata()?.inode {
                 // Same INode, do nothing
@@ -690,7 +690,12 @@ impl vfs::INode for INodeImpl {
             None
         };
 
+        info!(
+            "old info(/root): {:?}, dest_info(/root): {:?}",
+            info, dest_info
+        );
         let (old_entry, entry_id) = self.get_entry_and_entry_id(old_name)?;
+        info!("old entry: {:?}, entry_id: {:?}", old_entry, entry_id);
         if info.inode == dest_info.inode {
             // Move at same dirINode: just modify name
             let entry = DiskEntry {
@@ -698,9 +703,11 @@ impl vfs::INode for INodeImpl {
                 name: Str256::from(new_name),
                 type_: old_entry.type_,
             };
+            info!("new entry = {:?}, entry_id: {:?}", entry, entry_id);
             self.file.write_direntry(entry_id, &entry)?;
             // Replace the existing inode
             if let Some((replace_inode, replace_entry_id)) = to_be_replaced_inode_info {
+                info!("replace existing inode?");
                 if let Err(e) = self.dirent_inode_remove(replace_inode, replace_entry_id) {
                     // Recover if fail
                     self.file.write_direntry(entry_id, &old_entry)?;

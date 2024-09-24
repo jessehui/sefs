@@ -13,6 +13,7 @@ use alloc::{
 };
 use core::any::Any;
 use core::sync::atomic::*;
+use log::info;
 use rcore_fs::vfs::*;
 use spin::{RwLock, RwLockWriteGuard};
 
@@ -94,6 +95,7 @@ impl RamFS {
     }
 }
 
+#[derive(Debug)]
 struct RamFSINode {
     /// Reference to parent INode
     parent: Weak<LockedINode>,
@@ -109,11 +111,20 @@ struct RamFSINode {
     fs: Weak<RamFS>,
 }
 
+#[derive(Debug)]
 struct LockedINode(RwLock<RamFSINode>);
+
+impl Drop for LockedINode {
+    fn drop(&mut self) {
+        info!("ramfs drop inode: {:?}", self.0.read().extra);
+        // unreachable!();
+    }
+}
 
 impl INode for LockedINode {
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
         let file = self.0.read();
+        info!("ramfs readat file: {:?}", file.extra);
         if file.extra.type_ != FileType::File && file.extra.type_ != FileType::SymLink {
             return Err(FsError::NotFile);
         }
@@ -126,6 +137,7 @@ impl INode for LockedINode {
 
     fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize> {
         let mut file = self.0.write();
+        info!("ramfs writeat file: {:?}", file.extra);
         if file.extra.type_ != FileType::File && file.extra.type_ != FileType::SymLink {
             return Err(FsError::NotFile);
         }
@@ -142,6 +154,7 @@ impl INode for LockedINode {
         let file = self.0.read();
         let mut metadata = file.extra.clone();
         metadata.size = file.content.len();
+        info!("ramfs metadata = {:?}", metadata);
         Ok(metadata)
     }
 
@@ -153,6 +166,7 @@ impl INode for LockedINode {
         file.extra.mode = metadata.mode;
         file.extra.uid = metadata.uid;
         file.extra.gid = metadata.gid;
+        info!("ramfs set metadata = {:?}", metadata);
         Ok(())
     }
 
@@ -216,10 +230,12 @@ impl INode for LockedINode {
         temp_file.0.write().this = Arc::downgrade(&temp_file);
         file.children
             .insert(String::from(name), Arc::clone(&temp_file));
+        info!("ramfs create new file: {:?}", temp_file);
         Ok(temp_file)
     }
 
     fn link(&self, name: &str, other: &Arc<dyn INode>) -> Result<()> {
+        // unreachable!();
         let other = other
             .downcast_ref::<LockedINode>()
             .ok_or(FsError::NotSameFs)?;
@@ -245,6 +261,7 @@ impl INode for LockedINode {
     }
 
     fn unlink(&self, name: &str) -> Result<()> {
+        // unreachable!();
         if self.0.read().extra.type_ != FileType::Dir {
             return Err(FsError::NotDir);
         }
