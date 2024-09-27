@@ -8,6 +8,7 @@ extern crate alloc;
 //#[macro_use]
 extern crate log;
 
+use alloc::fmt::{self, Debug};
 use alloc::{
     boxed::Box,
     collections::BTreeMap,
@@ -17,6 +18,7 @@ use alloc::{
 };
 use core::any::Any;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use log::debug;
 use rcore_fs::dev::{DevError, EIO};
 use rcore_fs::vfs::*;
 #[cfg(not(feature = "create_image"))]
@@ -61,6 +63,23 @@ pub struct UnionINode {
     ext: Extension,
 }
 
+impl Debug for UnionINode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let inner = self.inner.read();
+        write!(
+            f,
+            "UnionINode {{ id: {:?}, path_with_mode: {:?}, cached_children: {:?} }}",
+            self.id, inner.path_with_mode, inner.cached_children
+        )
+    }
+}
+
+impl Drop for UnionINode {
+    fn drop(&mut self) {
+        debug!("UnionINode::drop: {:?}", self);
+    }
+}
+
 /// The mutable part of `UnionINode`
 struct UnionINodeInner {
     /// Path from root INode with mode
@@ -77,6 +96,7 @@ struct UnionINodeInner {
     cached_children: EntriesMap,
 }
 
+#[derive(Debug)]
 /// Directory entries
 struct EntriesMap {
     /// HashMap of the entries
@@ -95,6 +115,7 @@ impl EntriesMap {
 }
 
 /// Directory entry. It holds the reference to the real INode
+#[derive(Debug)]
 enum Entry {
     /// A weak reference to the file/symlink INode with inode_id to re-new the INode
     /// if it is dropped
@@ -110,6 +131,10 @@ impl Entry {
         } else {
             Self::File(Arc::downgrade(inode), inode.id)
         }
+    }
+
+    fn new_weak_file_with_id(inode_id: usize) -> Self {
+        Self::File(Weak::new(), inode_id)
     }
 
     fn as_inode(&self) -> Option<Arc<UnionINode>> {
@@ -257,6 +282,7 @@ impl UnionFS {
         id: Option<usize>,
         ext: Option<Extension>,
     ) -> Arc<UnionINode> {
+        debug!("create new union inode: {:?}, id: {:?}", path_with_mode, id);
         Arc::new(UnionINode {
             id: id.unwrap_or_else(|| self.alloc_inode_id()),
             fs: self.self_ref.clone(),
@@ -367,7 +393,11 @@ impl UnionINodeInner {
         let cache = &mut self.cached_children.map;
         if !self.cached_children.is_merged {
             let entries = Self::merge_entries(&self.inners, self.opaque).unwrap();
-            //debug!("{:?} cached dirents: {:?}", self.path, entries.keys());
+            debug!(
+                "{:?} cached dirents: {:?}",
+                self.path_with_mode,
+                entries.keys()
+            );
             *cache = entries;
             self.cached_children.is_merged = true;
         }
@@ -571,6 +601,48 @@ impl UnionINode {
             new_inode.inner.write().parent = Arc::downgrade(&parent_guard.this.upgrade().unwrap());
         }
         new_inode
+    }
+
+    fn copy_child_cache(&self, new_inode: &Self) {
+        assert!(self.metadata().unwrap().type_ == FileType::Dir);
+        assert!(new_inode.metadata().unwrap().type_ == FileType::Dir);
+        debug!("copy child cache, old: {:?}, new: {:?}", self, new_inode);
+        let mut old_inner = self.inner.write();
+        let old_inode_child_cache = old_inner.entries();
+
+        let mut new_inode_inner = new_inode.inner.write();
+        debug!("new_inode_inner cache: {:?}", new_inode_inner.entries());
+
+        for (name, entry_) in old_inode_child_cache {
+            if let Some(entry) = entry_ {
+                match entry {
+                    Entry::File(_, inode_id) => {
+                        debug!("copy_child_cache name: {:?}, File type", name);
+
+                        // Inserting a file type inode will just keep the weak refernce, thus here we just use inode id
+                        let new_entry = Entry::new_weak_file_with_id(*inode_id);
+                        new_inode_inner
+                            .entries()
+                            .insert(name.clone(), Some(new_entry));
+                    }
+                    Entry::Dir(dir_inode) => {
+                        debug!("copy_child_cache name: {:?}, Dir type", name);
+                        let copy_dir_inode = Self::new_inode(
+                            &self.fs,
+                            &new_inode_inner,
+                            name,
+                            Some(dir_inode.id),
+                            Some(dir_inode.ext.clone()),
+                        );
+                        dir_inode.copy_child_cache(&copy_dir_inode);
+                        let new_entry = Entry::new(&copy_dir_inode);
+                        new_inode_inner
+                            .entries()
+                            .insert(name.clone(), Some(new_entry));
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -887,6 +959,12 @@ impl INode for UnionINode {
                 Some(old.id),
                 Some(old.ext.clone()),
             );
+
+            // If move dir, we also need to move the cached children to new union inode
+            if old_inode_type == FileType::Dir {
+                old.copy_child_cache(&new_inode);
+            }
+
             self_inner.entries().remove(old_name);
             self_inner
                 .entries()
@@ -956,6 +1034,12 @@ impl INode for UnionINode {
                 Some(old.id),
                 Some(old.ext.clone()),
             );
+
+            // If move dir, we also need to move the cached children to new union inode
+            if old_inode_type == FileType::Dir {
+                old.copy_child_cache(&new_inode);
+            }
+
             self_inner.entries().remove(old_name);
             target_inner
                 .entries()
@@ -989,6 +1073,7 @@ impl INode for UnionINode {
         } else {
             None
         };
+        debug!("new inode name: {:?}, reuse_id: {:?}", name, reused_id);
         let new_inode = Self::new_inode(&self.fs, &inner, name, reused_id, None);
         inner
             .entries()
